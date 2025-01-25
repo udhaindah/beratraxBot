@@ -4,6 +4,8 @@
 - website : [https://beratrax.com/](https://testnet.beratrax.com/GeognosticalBera)
 ## Features
 
+- **Auto Claim Faucet Bera**
+- **Auto Zap In And Stake Lp**
 - **Auto Register Wallets**
 - **Auto Generate New Wallets**
 - **Support Proxy usage**
