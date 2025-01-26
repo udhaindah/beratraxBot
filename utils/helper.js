@@ -1,6 +1,6 @@
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
-import { solve2Captcha, solveAntiCaptcha } from './solver.js';
+import { solve2Captcha, solveAntiCaptcha, solveCapMonster } from './solver.js';
 import fs from 'fs/promises';
 import log from './logger.js';
 import readline from 'readline';
@@ -65,7 +65,20 @@ export async function readWallets() {
 
 export async function solveCaptcha(apikey, type = '1') {
     try {
-        const captcha = type === '1' ? await solve2Captcha(apikey) : await solveAntiCaptcha(apikey)
+        let captcha;
+        switch (type) {
+            case '1': 
+                captcha = await solve2Captcha(apikey);
+                break;
+            case '2': 
+                captcha = await solveAntiCaptcha(apikey);
+                break;
+            case '3':
+                captcha = await solveCapMonster(apikey);
+                break;
+            default:
+                throw new Error(`Invalid captcha type: ${type}`);
+        }
         return captcha;
     } catch (error) {
         log.error(`Error solving captcha: ${error.message}`);

@@ -1,5 +1,6 @@
 import { Solver } from "@2captcha/captcha-solver";
 import anticaptcha from "@antiadmin/anticaptchaofficial";
+import { CapMonsterCloudClientFactory, ClientOptions, TurnstileRequest } from '@zennolab_com/capmonstercloud-client';
 import log from "./logger.js";
 
 const pageurl = "https://bartio.faucet.berachain.com/";
@@ -40,3 +41,26 @@ export async function solveAntiCaptcha(key) {
         return null;
     }
 }
+
+/**
+ * Solve CAPTCHA using Anti-Captcha API
+ * @param {string} key - Anti-Captcha API key
+ * @returns {Promise<string>} - Solved CAPTCHA token
+ */
+export async function solveCapMonster(clientKey) {
+    try {
+        const cmcClient = CapMonsterCloudClientFactory.Create(new ClientOptions({ clientKey }));
+        log.info("CapMonster Balance:", await cmcClient.getBalance());
+
+        const turnstileRequest = new TurnstileRequest({
+            websiteURL: pageurl,
+            websiteKey: sitekey,
+        });
+        log.info("Captcha Solved!");
+        const CaptchaResult = await cmcClient.Solve(turnstileRequest);
+        return CaptchaResult?.solution?.token;
+    } catch (error) {
+        log.error(`CapMonster Error: ${error.message}`);
+        return null;
+    }
+};

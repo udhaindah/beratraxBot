@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import log from "./logger.js"
-
+import { delay } from "./helper.js"
 const RPC_URL = "https://bartio.rpc.berachain.com";
 const ZAP_CONTRACT_ADDRESS = "0xE6687F93F98dcAAb44033ccc0c225640360414e6";
 const STAKE_CONTRACT_ADDRESS = "0x8872898bc15a7c610Ccc905DF1f6F623ad1DCc20";
@@ -27,7 +27,7 @@ async function retryOperation(fn, retries = MAX_RETRIES) {
         return await fn();
     } catch (error) {
         if (retries === 0) throw error;
-        log.error(`Operation failed. Retrying... ${retries} retries left`);
+        log.error(`Operation failed. Retrying... ${retries - 1} retries left`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         return await retryOperation(fn, retries - 1);
     }
@@ -82,21 +82,47 @@ async function stakeTokens(stakeContract, balance) {
     }
 }
 
-async function zapAndStake(PRIVATE_KEY) {
+async function waitForFaucet(provider, wallet, isClaimed, threshold = 1, delaySeconds = 5, timeoutSeconds = 300) {
+    let bera = 0;
+    try {
+        let nativeBalance = await provider.getBalance(wallet.address);
+        bera = parseFloat(ethers.formatUnits(nativeBalance, 18));
+
+        const timeoutTime = Date.now() + timeoutSeconds * 1000;
+
+        while (isClaimed === 401 && bera < threshold) {
+            log.warn(`Faucet not added yet. Current balance: ${bera}. Rechecking in ${delaySeconds} seconds...`);
+            await delay(delaySeconds);
+
+            if (Date.now() > timeoutTime) {
+                throw new Error("Timeout: Faucet did not add funds within the expected time.");
+            }
+
+            nativeBalance = await provider.getBalance(wallet.address);
+            bera = parseFloat(ethers.formatUnits(nativeBalance, 18));
+            log.info(`Faucet added funds. Current balance: ${bera}`);
+        }
+        log.info(`Native Bera Balance =>`, bera);
+        return bera;
+    } catch (error) {
+        log.error(`Error while waiting for faucet: ${error.message}`);
+        return bera;
+    }
+}
+
+async function zapAndStake(PRIVATE_KEY, isClaimed, minBalance = 0.11) {
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-    const nativeBalance = await provider.getBalance(wallet.address);
-    const bera = ethers.formatUnits(nativeBalance, 18);
-    log.info('Native Bera Balance =>', bera);
+    const bera = await waitForFaucet(provider, wallet, isClaimed)
 
     const zapContract = new ethers.Contract(ZAP_CONTRACT_ADDRESS, zapAbi, wallet);
     const tokenContract = new ethers.Contract(TOKEN_ADDRESS, tokenAbi, wallet);
     const stakeContract = new ethers.Contract(STAKE_CONTRACT_ADDRESS, stakeAbi, wallet);
 
     try {
-        if (+bera > 0.11) {
+        if (bera > minBalance) {
             // Step 1: Perform Zap In 
-            await retryOperation(() => zapIn(zapContract, TOKEN_ADDRESS, +bera - 0.01));
+            await retryOperation(() => zapIn(zapContract, TOKEN_ADDRESS, bera - 0.01));
 
             // Step 2: Approve token 
             await retryOperation(() => approveForStaking(tokenContract, wallet, STAKE_CONTRACT_ADDRESS));

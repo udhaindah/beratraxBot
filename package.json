@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "description": "auto interact bera network - auto claim faucet",
   "main": "main.js",
-  "devDependencies": {},
   "scripts": {
     "start": "node main.js",
     "setup": "node setup.js"
@@ -14,6 +13,7 @@
   "dependencies": {
     "@2captcha/captcha-solver": "^1.3.0",
     "@antiadmin/anticaptchaofficial": "^1.0.49",
+    "@zennolab_com/capmonstercloud-client": "^1.8.2",
     "axios": "^1.7.9",
     "chalk": "^5.4.1",
     "ethers": "^6.13.5",
