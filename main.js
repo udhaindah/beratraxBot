@@ -43,7 +43,7 @@ async function claimTokens(address, proxy, type, apiKey, useCaptcha = false, ret
         } else {
             log.error(`Error claiming Faucets, Retry Left ${retries}`, error.response?.statusText || error.message);
             await delay(2)
-            if (retries > 0) return await claimTokens(address, proxy, type, apiKey, useCaptcha, retries - 3)
+            if (retries > 0) return await claimTokens(address, proxy, type, apiKey, useCaptcha, retries - 1)
             else return null;
         }
     }
