@@ -17,7 +17,10 @@
 - if you already have account registered just create `wallets.json` and input wallet details there
 - look wallet example in `wallet-example.json`
 - or just create new wallet using sc `npm run setup`
-- Captcha ApiKey get one here http://2captcha.com or http://anti-captcha.com
+- Captcha ApiKey get one here 
+- http://2captcha.com 
+- http://anti-captcha.com
+- https://capmonster.cloud
 
 ## Installation
 
