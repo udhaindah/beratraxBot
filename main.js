@@ -88,6 +88,47 @@ async function createAccount(address, proxy, retries = 3) {
     }
 }
 
+async function claimPointsFromFollow(address, proxy, retries = 3) {
+    const agent = newAgent(proxy)
+    const url = "https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/account/send-btx-for-x-follow";
+    const data = {
+        address
+    };
+
+    try {
+        const response = await axios.post(url, data, {
+            httpsAgent: agent
+        });
+        log.info("Claim Free Trax result:", response.data);
+    } catch (error) {
+        log.error("Error Claim Free Trax", error.response?.statusText || error.message);
+        if (retries > 0) return await claimPointsFromFollow(address, proxy, retries - 1)
+    }
+}
+
+async function getPointsUser(address, proxy, retries = 3) {
+    const agent = newAgent(proxy)
+    const url = `https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/stats/tvl?address=${address}`;
+
+    try {
+        const { data } = await axios.get(url, {
+            httpsAgent: agent
+        });
+
+        const result = {
+            earnedTrax: data.data[0]?.earnedTrax,
+            estimatedTraxPerDay: data.data[0]?.estimatedTraxPerDay[0]?.estimatedTraxPerDay || 0,
+            leaderboardRanking: data.data[0]?.leaderboardRanking,
+            tvl: data.data[0]?.tvl
+        };
+        log.info("Address Info result:", result);
+
+    } catch (error) {
+        log.error("Error checking addr info", error.response?.statusText || error.message);
+        if (retries > 0) return await getPointsUser(address, proxy, retries - 1)
+    }
+}
+
 async function updateHistoryTx(address, proxy, amount, retries = 3) {
     const agent = newAgent(proxy)
     const url = "https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/transaction/save-history-tx";
@@ -150,6 +191,7 @@ async function main() {
 
     const proxies = await readFile('proxy.txt')
     if (proxies.length === 0) log.warn('Running without proxy...')
+    let isClaimedReward = false
 
     while (true) {
         for (let i = 0; i < wallets.length; i++) {
@@ -160,6 +202,12 @@ async function main() {
                 log.info(`Processing Wallet ${address} with proxy:`, proxy);
                 await setConnector(address, proxy);
                 await createAccount(address, proxy);
+                await getPointsUser(address, proxy)
+
+                if (!isClaimedReward) {
+                    await claimPointsFromFollow(address, proxy)
+                }
+
                 const isClaimed = await claimTokens(address, proxy);
                 if (!isClaimed) continue;
                 else if (isClaimed === 401) await claimTokens(address, proxy, type, apiKey, true);
@@ -172,11 +220,13 @@ async function main() {
                     if (!amount) continue;
                     else await updateHistoryTx(address, proxy, amount);
                 }
+
             } catch (error) {
                 log.error("Error creating account and staking:", error.message);
                 continue;
             }
         }
+        isClaimedReward = true
         log.info(`All wallets processed, waiting 8 hour before next run...`);
         await delay(8 * 60 * 60);
     }
