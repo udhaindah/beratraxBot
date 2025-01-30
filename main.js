@@ -1,25 +1,22 @@
-
 import axios from 'axios';
-import log from "./utils/logger.js"
-import iniBapakBudi from "./utils/banner.js"
-import zapAndStake from './utils/stake.js'
+import log from "./utils/logger.js";
+import iniBapakBudi from "./utils/banner.js";
 import {
     delay,
     newAgent,
-    readFile,
     readWallets,
     solveCaptcha,
     askQuestion
-} from './utils/helper.js'
+} from './utils/helper.js';
 
 async function claimTokens(address, proxy, type, apiKey, useCaptcha = false, retries = 3) {
-    const agent = newAgent(proxy)
-    const url = `https://bartiofaucet.berachain.com/api/claim?address=${address}`;
-    const data = {
-        address
-    };
+    const agent = newAgent(proxy);
+    const url = `https://www.faucet.kodiak.finance/api/claim`;
+    const data = { address };
     const captcha = useCaptcha ? await solveCaptcha(apiKey, type) : '';
+    
     log.info(`Trying to claim faucet for address ${address}...`);
+    
     try {
         const response = await axios.post(url, data, {
             headers: {
@@ -28,208 +25,57 @@ async function claimTokens(address, proxy, type, apiKey, useCaptcha = false, ret
             },
             httpsAgent: agent
         });
-
+        
         log.info("Claim Faucet Result:", response.data);
         return response.data;
     } catch (error) {
-        if (error.response?.status === 402) {
-            log.error(`You have to have at least 0.001 ETH on Ethereum Mainnet in your wallet to be able to use the faucet.`);
-        } else if (error.response?.status === 401) {
-            log.error(`You have to solve the captcha first, trying to solve captcha...`)
-            return 401;
-        } else if (error.response.status === 429) {
-            log.warn(`You have been rate limited. use proxy if you are sure this wallet never claim faucet before.`);
-            return 'claimed'
+        if (error.response?.status === 429) {
+            log.warn(`Rate limited. Try again later or use a proxy.`);
+            return 'claimed';
         } else {
             log.error(`Error claiming Faucets, Retry Left ${retries}`, error.response?.statusText || error.message);
-            await delay(2)
-            if (retries > 0) return await claimTokens(address, proxy, type, apiKey, useCaptcha, retries - 1)
+            await delay(2);
+            if (retries > 0) return await claimTokens(address, proxy, type, apiKey, useCaptcha, retries - 1);
             else return null;
         }
     }
 }
 
-async function setConnector(address, proxy, retries = 3) {
-    const agent = newAgent(proxy)
-    const url = "https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/account/set-connector";
-    const data = {
-        address,
-        connector: "io.metamask"
-    };
-
-    try {
-        const response = await axios.post(url, data, {
-            httpsAgent: agent
-        });
-        log.info("Set connector result:", response.data);
-    } catch (error) {
-        log.error("Error setting connector:", error.response?.statusText || error.message);
-        if (retries > 0) return await setConnector(address, proxy, retries - 1)
-    }
-}
-
-async function createAccount(address, proxy, retries = 3) {
-    const agent = newAgent(proxy)
-    const url = "https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/account";
-    const data = {
-        address,
-        referrer: "GeognosticalBera"
-    };
-
-    try {
-        const response = await axios.post(url, data, {
-            httpsAgent: agent
-        });
-        if (response?.data?.error) return null;
-        log.info("Create account result:", response.data);
-    } catch (error) {
-        log.error("Error creating account:", error.response?.statusText || error.message);
-        if (retries > 0) return await createAccount(address, proxy, retries - 1)
-    }
-}
-
-async function claimPointsFromFollow(address, proxy, retries = 3) {
-    const agent = newAgent(proxy)
-    const url = "https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/account/send-btx-for-x-follow";
-    const data = {
-        address
-    };
-
-    try {
-        const response = await axios.post(url, data, {
-            httpsAgent: agent
-        });
-        log.info("Claim Free Trax result:", response.data);
-    } catch (error) {
-        log.error("Error Claim Free Trax", error.response?.statusText || error.message);
-        if (retries > 0) return await claimPointsFromFollow(address, proxy, retries - 1)
-    }
-}
-
-async function getPointsUser(address, proxy, retries = 3) {
-    const agent = newAgent(proxy)
-    const url = `https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/stats/tvl?address=${address}`;
-
-    try {
-        const { data } = await axios.get(url, {
-            httpsAgent: agent
-        });
-
-        const result = {
-            earnedTrax: data.data[0]?.earnedTrax,
-            estimatedTraxPerDay: data.data[0]?.estimatedTraxPerDay[0]?.estimatedTraxPerDay || 0,
-            leaderboardRanking: data.data[0]?.leaderboardRanking,
-            tvl: data.data[0]?.tvl
-        };
-        log.info("Address Info result:", result);
-
-    } catch (error) {
-        log.error("Error checking addr info", error.response?.statusText || error.message);
-        if (retries > 0) return await getPointsUser(address, proxy, retries - 1)
-    }
-}
-
-async function updateHistoryTx(address, proxy, amount, retries = 3) {
-    const agent = newAgent(proxy)
-    const url = "https://beratrax-api-ae00332865bc.herokuapp.com/api/v1/transaction/save-history-tx";
-    const data = {
-        "from": address,
-        "amountInWei": amount,
-        "date": new Date().toString(),
-        "type": "deposit",
-        "farmId": 1001,
-        "max": false,
-        "token": "0x0000000000000000000000000000000000000000",
-        "steps": [
-            {
-                "status": "COMPLETED",
-                "type": "Zap In",
-                "amount": amount
-            },
-            {
-                "status": "COMPLETED",
-                "type": "Stake into reward vault",
-                "amount": amount
-            }
-        ]
-    }
-
-    try {
-        log.info(`Trying to update history tx for ${address}...`);
-        const response = await axios.post(url, data, {
-            httpsAgent: agent
-        });
-        if (response?.data?.error) return null;
-        log.info("Update history tx result:", response.data);
-    } catch (error) {
-        log.error("Error Update history tx:", error.response?.statusText || error.message);
-        if (retries > 0) return await updateHistoryTx(address, proxy, amount, retries - 1)
-    }
-}
-
 async function main() {
-    log.info(iniBapakBudi)
-    await delay(3)
+    log.info(iniBapakBudi);
+    await delay(3);
 
-    const type = await askQuestion("What Captcha Solver you want to use [1. 2Captcha, 2. AntiCaptcha, 3. CapMonster] input (1-3): ")
-    if (type !== '1' && type !== '2' && type !== '3') {
-        log.error("Invalid captcha solver type, please enter number : 1-3 ");
+    const type = await askQuestion("What Captcha Solver you want to use [1. 2Captcha, 2. AntiCaptcha, 3. CapMonster] input (1-3): ");
+    if (!["1", "2", "3"].includes(type)) {
+        log.error("Invalid captcha solver type, please enter number: 1-3");
         return;
     }
 
-    const apiKey = await askQuestion("Enter Your Apikey : ");
+    const apiKey = await askQuestion("Enter Your API Key: ");
     if (!apiKey) {
-        log.error("Invalid api key");
+        log.error("Invalid API Key");
         return;
     }
 
     const wallets = await readWallets();
     if (wallets.length === 0) {
-        log.error("No wallets found - please create wallets first 'npm run setup'");
+        log.error("No wallets found - please create wallets first.");
         return;
     }
 
-    const proxies = await readFile('proxy.txt')
-    if (proxies.length === 0) log.warn('Running without proxy...')
-    let isClaimedReward = false
-
-    while (true) {
-        for (let i = 0; i < wallets.length; i++) {
-            const wallet = wallets[i];
-            const proxy = proxies[i % proxies.length] || null;
-            const { address, privateKey } = wallet;
-            try {
-                log.info(`Processing Wallet ${address} with proxy:`, proxy);
-                await setConnector(address, proxy);
-                await createAccount(address, proxy);
-                await getPointsUser(address, proxy)
-
-                if (!isClaimedReward) {
-                    await claimPointsFromFollow(address, proxy)
-                }
-
-                const isClaimed = await claimTokens(address, proxy);
-                if (!isClaimed) continue;
-                else if (isClaimed === 401) await claimTokens(address, proxy, type, apiKey, true);
-                log.info(`Processing Zap In and Stake for Wallet:`, address);
-
-                const zapAndStakeResult = await zapAndStake(privateKey, isClaimed)
-                if (zapAndStakeResult) {
-                    log.info(`On-Chain Result:`, zapAndStakeResult);
-                    const amount = zapAndStakeResult?.balance || 0;
-                    if (!amount) continue;
-                    else await updateHistoryTx(address, proxy, amount);
-                }
-
-            } catch (error) {
-                log.error("Error creating account and staking:", error.message);
-                continue;
-            }
+    log.info(`Starting Faucet Claims...`);
+    for (const wallet of wallets) {
+        const { address } = wallet;
+        try {
+            log.info(`Processing Wallet ${address}...`);
+            await claimTokens(address, null, type, apiKey, true);
+        } catch (error) {
+            log.error("Error processing wallet:", error.message);
         }
-        isClaimedReward = true
-        log.info(`All wallets processed, waiting 8 hour before next run...`);
-        await delay(8 * 60 * 60);
     }
+    log.info(`All wallets processed. Waiting 8 hours before next run...`);
+    await delay(8 * 60 * 60);
+    main();
 }
 
-main()
+main();
